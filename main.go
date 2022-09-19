@@ -23,35 +23,83 @@ type SubmissionData struct {
 	} `json:"matchedUser"`
 }
 
+type RandomQuestionData struct {
+	RandomQuestion struct {
+		TitleSlug string `json:"titleSlug"`
+	} `json:"randomQuestion"`
+}
+
 func main() {
-	username := "SolidShake"
-	client := graphql.NewClient("https://leetcode.com/graphql")
+	client := newGraphqlClient(graphql.NewClient("https://leetcode.com/graphql"), "SolidShake")
 
-	req := graphql.NewRequest(`
-	query getUserProfile($username: String!) {
-	  allQuestionsCount {
-		difficulty
-		count
-	  }
-	  matchedUser(username: $username) {
-		submitStats {
-		  acSubmissionNum {
-			difficulty
-			count
-			submissions
-		  }
-		}
-	  }
-	}
-  `)
-	req.Var("username", username)
-
-	ctx := context.Background()
-
-	var respData SubmissionData
-	if err := client.Run(ctx, req, &respData); err != nil {
+	resp, err := client.getStats()
+	if err != nil {
 		panic(err)
 	}
+	fmt.Println(resp)
 
-	fmt.Println(respData)
+	random, err := client.getRandomProblem()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(random)
+}
+
+type graphqlClient struct {
+	client   *graphql.Client
+	username string
+}
+
+func newGraphqlClient(client *graphql.Client, username string) *graphqlClient {
+	return &graphqlClient{
+		client:   client,
+		username: username,
+	}
+}
+
+func (c *graphqlClient) getStats() (*SubmissionData, error) {
+	request := graphql.NewRequest(`
+	query getUserProfile($username: String!) {
+		allQuestionsCount {
+			difficulty
+			count
+		}
+		matchedUser(username: $username) {
+			submitStats {
+				acSubmissionNum {
+					difficulty
+					count
+					submissions
+				}
+			}
+		}
+	}
+	`)
+	request.Var("username", c.username)
+
+	var respData *SubmissionData
+	if err := c.client.Run(context.Background(), request, &respData); err != nil {
+		return nil, err
+	}
+
+	return respData, nil
+}
+
+func (c *graphqlClient) getRandomProblem() (*RandomQuestionData, error) {
+	request := graphql.NewRequest(`
+	query randomQuestion($categorySlug: String, $filters: QuestionListFilterInput) {
+		randomQuestion(categorySlug: $categorySlug, filters: $filters) {
+			titleSlug
+		}
+	}
+	`)
+	request.Var("categorySlug", "")
+	request.Var("filters", struct{}{})
+
+	var respData *RandomQuestionData
+	if err := c.client.Run(context.Background(), request, &respData); err != nil {
+		return nil, err
+	}
+
+	return respData, nil
 }
